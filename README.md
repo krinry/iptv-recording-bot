@@ -5,7 +5,7 @@ A powerful Telegram bot for recording IPTV/M3U8 streams and uploading them direc
 ![Python](https://img.shields.io/badge/Python-3.9+-blue?logo=python&logoColor=white)
 ![Telegram](https://img.shields.io/badge/Telegram-Bot-0088cc?logo=telegram&logoColor=white)
 ![FFmpeg](https://img.shields.io/badge/FFmpeg-Required-green?logo=ffmpeg&logoColor=white)
-![License](https://img.shields.io/badge/License-MIT-yellow)
+![License](https://img.shields.io/badge/License-GPLv3-blue)
 
 ---
 
@@ -214,7 +214,7 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## 📜 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the GNU General Public License v3.0 - see the [LICENSE](LICENSE) file for details.
 
 ---
 

@@ -1,0 +1,11 @@
+tgcrypto
+ffmpeg-python
+python-dotenv
+apscheduler
+pytz
+requests
+telethon
+aiofiles
+aiohttp
+pymongo
+motor

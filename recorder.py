@@ -222,6 +222,14 @@ async def start_recording(telethon_client: TelegramClient, url: str, duration: s
             part_num = f" part {i+1}" if len(files_to_upload) > 1 else ""
             final_filename = f"{sanitized_title}{part_num}.{sanitized_channel}.{now.strftime(time_format)}-{end_time.strftime(time_format) if not is_unlimited else 'UNLIMITED'}.{now.strftime('%d-%m-%Y')}.{int(now.timestamp())}.IPTV.WEB-DL.@Krinry123.mkv"
             output_path = os.path.join(RECORDINGS_DIR, final_filename)
+            
+            # Remove target file if it already exists
+            if os.path.exists(output_path):
+                try:
+                    os.remove(output_path)
+                except Exception as e:
+                    print(f"[Recorder] [WARNING] Could not remove existing file: {e}")
+            
             os.rename(file_path, output_path)
 
             thumbnail_path = os.path.join(RECORDINGS_DIR, f"{final_filename}.jpg")

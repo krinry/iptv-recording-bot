@@ -13,39 +13,11 @@ from uploader import send_video
 from telethon.sync import TelegramClient
 from telethon import events, Button
 from telethon.errors.rpcerrorlist import FloodWaitError
-from recorders.recorder_utils import resolve_stream, get_stream_quality
+from recorders.recorder_utils import resolve_stream, get_stream_quality, get_video_duration
 from features.status_broadcast import add_active_recording, remove_active_recording
 import re
 
 from captions import create_progress_bar, seconds_to_hms, caption_recording_started, caption_recording_progress, caption_recording_completed
-
-async def get_video_duration(file_path: str) -> Optional[float]:
-    """Gets the duration of a video file using ffprobe."""
-    cmd = [
-        "ffprobe",
-        "-v", "error",
-        "-show_entries", "format=duration",
-        "-of", "default=noprint_wrappers=1:nokey=1",
-        file_path
-    ]
-    try:
-        process = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
-        )
-        stdout, stderr = await process.communicate()
-        if process.returncode == 0:
-            return float(stdout.decode().strip())
-        else:
-            print(f"[Recorder] [ERROR] FFprobe error: {stderr.decode().strip()}")
-            return None
-    except FileNotFoundError:
-        print("[Recorder] [ERROR] ffprobe not found. Please ensure FFmpeg is installed and in your PATH.")
-        return None
-    except Exception as e:
-        print(f"[Recorder] [ERROR] Error getting video duration: {e}")
-        return None
 
 async def start_recording(telethon_client: TelegramClient, url: str, duration: str, channel: str, title: str, chat_id: int, message_id: int, scheduled_jobs: Dict[int, Dict[str, any]], split_duration_sec: int = None):
     recording_message = None

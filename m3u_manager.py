@@ -170,7 +170,7 @@ class M3UManager:
         
         return None
 
-# Initialize with multiple playlists
-m3u_manager = M3UManager([
-    "https://example.com/playlist.m3u8",
-])
+from config import M3U_PLAYLISTS
+
+# Initialize with multiple playlists from config
+m3u_manager = M3UManager(M3U_PLAYLISTS)

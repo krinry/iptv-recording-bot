@@ -17,7 +17,7 @@ session_files/
 # Recordings and cache
 recordings/
 playlist_cache/
-recorders/
+
 
 # Logs and temp files
 *.log

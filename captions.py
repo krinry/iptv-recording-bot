@@ -25,6 +25,21 @@ def caption_recording_started(title, channel, duration_sec, start_time_str):
     )
 
 def caption_recording_progress(title, channel, total_duration, start_time_str, elapsed_sec, remaining_sec, error_msg=None):
+    # Prevent division by zero for unlimited recordings
+    if total_duration == 0:
+        progress = 0
+        progress_bar = create_progress_bar(0)
+        elapsed_hms = seconds_to_hms(elapsed_sec)
+        return (
+            f"⏳ **Recording in Progress**\n\n"
+            f"📌 **Title:** `{title}`\n"
+            f"📺 **Channel:** `{channel}`\n"
+            f"⏱ **Duration:** `Unlimited`\n"
+            f"⏰ **Started At:** `{start_time_str}`\n\n"
+            f"▶️ **Elapsed:** `{elapsed_hms}`\n\n"
+            f"**Status:** 🔄 Recording..."
+        )
+    
     progress = min(elapsed_sec / total_duration, 1)
     progress_bar = create_progress_bar(progress)
     
@@ -41,9 +56,9 @@ def caption_recording_progress(title, channel, total_duration, start_time_str, e
         f"📺 **Channel:** `{channel}`\n"
         f"⏱ **Duration:** `{total_hms}`\n"
         f"⏰ **Started At:** `{start_time_str}`\n\n"
-        f"[{progress_bar}] {progress * 100:.1f}%\n"
+        f"{progress_bar} **{int(progress*100)}%**\n"
         f"▶️ **Elapsed:** `{elapsed_hms}`\n"
-        f"⏭ **Remaining:** `{remaining_hms}`\n\n"
+        f"⏱️ **Remaining:** `{remaining_hms}`\n\n"
         f"**Status:** {status}{error_line}"
     )
 

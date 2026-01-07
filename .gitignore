@@ -18,6 +18,11 @@ session_files/
 recordings/
 playlist_cache/
 
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+chatbot/data.db
 
 # Logs and temp files
 *.log

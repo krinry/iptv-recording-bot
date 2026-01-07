@@ -237,7 +237,7 @@ async def start_recording(telethon_client: TelegramClient, url: str, duration: s
                 actual_duration = split_duration_sec if split_duration_sec else total_seconds
 
             readable_duration = seconds_to_hms(actual_duration)
-            readable_size = format_bytes(os.path.getsize(output_path))
+            readable_size = await format_bytes(os.path.getsize(output_path))
 
             caption = f"`📁 Filename: {final_filename}\n⏱ Duration: {readable_duration}\n💾 File-Size: {readable_size}`\n☎️ @krinry123"
 

@@ -75,14 +75,18 @@ def caption_recording_completed(title, channel, duration_sec, start_time_str):
         f"📤 **Status:** Preparing for upload..."
     )
 
-def caption_uploading(title, uploaded_size, total_size, speed_bps):
+async def caption_uploading(title, uploaded_size, total_size, speed_bps):
     progress = uploaded_size / total_size if total_size else 0
+    uploaded_str = await format_bytes(uploaded_size)
+    total_str = await format_bytes(total_size)
+    speed_str = await format_bytes(speed_bps)
+    
     return (
         f"⏫ *Uploading*\\*\\.\\*\\*\n\n"  # Escaped asterisks and period
         f"**Title:** `{title}`\n"
         f"Progress: {create_progress_bar(progress)} {int(progress*100)}%\n"
-        f"Uploaded: {format_bytes(uploaded_size)} / {format_bytes(total_size)}\n"
-        f"Speed: {format_bytes(speed_bps)}/s"
+        f"Uploaded: {uploaded_str} / {total_str}\n"
+        f"Speed: {speed_str}/s"
     )
 
 def caption_uploaded(title: str, resolution: str, duration: str, size: str) -> str:

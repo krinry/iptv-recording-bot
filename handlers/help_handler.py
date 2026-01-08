@@ -6,76 +6,66 @@ from utils.admin_checker import is_admin, is_temp_admin
 # --- Help Text Content ---
 
 def get_main_help_text():
-    return """
-    🔸 **Bot Commands Help** 🔸
+    return """🔸 **Bot Commands Help** 🔸
 
-    Select a category below to see the available commands.
-    """
+Select a category below to see the available commands."""
 
 def get_recording_help_text():
-    return """
-    🎥 **Recording Commands**
+    return """🎥 **Recording Commands**
 
-    `/rd <url> <duration> <title> --split <time>`
-    ├ Records a stream with optional duration and splitting
+`/rd <url> <duration> <title> --split <time>`
+├ Records a stream with optional duration and splitting
 
 
-    📝 Examples:
-    ├ /rd http://... My Stream
-    │  ↳ Unlimited recording
-    ├ /rd http://... 10:00 Ten Min
-    │  ↳ Records for 10 minutes
-    ├ /rd http://... Stream --split 30:00
-    │  ↳ Splits every 30 minutes
-    └ /rd http://... 02:00:00 Movie --split 01:00:00
-       ↳ 2 hour recording, split hourly
+📝 Examples:
+├ /rd http://... My Stream
+│  ↳ Unlimited recording
+├ /rd http://... 10:00 Ten Min
+│  ↳ Records for 10 minutes
+├ /rd http://... Stream --split 30:00
+│  ↳ Splits every 30 minutes
+└ /rd http://... 02:00:00 Movie --split 01:00:00
+   ↳ 2 hour recording, split hourly
 
-    **Scheduled Recording:**
-    `/sd <url/id> <datetime> <duration> [title]`
-    - **datetime:** In `DD-MM-YYYY HH:MM:SS` format.
-    
-    **Find Channels:**
-    `/find <query>` - Search for channels by name or ID.
-    """
+**Scheduled Recording:**
+`/sd <url/id> <datetime> <duration> [title]`
+- **datetime:** In `DD-MM-YYYY HH:MM:SS` format.
+
+**Find Channels:**
+`/find <query>` - Search for channels by name or ID."""
 
 def get_admin_help_text():
-    return """
-    🛡️ **Admin Management**
+    return """🛡️ **Admin Management**
 
-    `/add <user_id> [duration]`
-    - Adds a temporary admin.
-    - **duration:** (Optional) e.g., `1h`, `2d`.
-    
-    `/rm <user_id>`
-    - Removes an admin or temporary admin.
+`/add <user_id> [duration]`
+- Adds a temporary admin.
+- **duration:** (Optional) e.g., `1h`, `2d`.
 
-    `/status`
-    `/sts`
-    - Check your admin status and remaining time.
-    """
+`/rm <user_id>`
+- Removes an admin or temporary admin.
+
+`/status`
+`/sts`
+- Check your admin status and remaining time."""
 
 def get_messaging_help_text():
-    return """
-    📩 **Messaging Commands**
+    return """📩 **Messaging Commands**
 
-    `/reply <user_id> <message>`
-    - Sends a message to a specific user.
+`/reply <user_id> <message>`
+- Sends a message to a specific user.
 
-    `/broadcast <message>`
-    `/bd <message>`
-    - Sends a message to all users.
-    
-    **Reply to a forwarded message** to send a response directly to that user.
-    """
+`/broadcast <message>`
+`/bd <message>`
+- Sends a message to all users.
+
+**Reply to a forwarded message** to send a response directly to that user."""
 
 def get_file_management_help_text():
-    return """
-    📁 **File Management**
+    return """📁 **File Management**
 
-    ├ /files - List recorded videos
-    ├ /upload <file> - Upload a video
-    └ /delete <file> - Delete a video
-    """
+├ /files - List recorded videos
+├ /upload <file> - Upload a video
+└ /delete <file> - Delete a video"""
 
 # --- Keyboard Layouts ---
 
@@ -119,7 +109,8 @@ async def send_help(event: events.NewMessage):
 async def help_callback(event: events.CallbackQuery):
     await event.answer()
 
-    help_section = event.data.decode('utf-8').split("_")[1]
+    # Extract section name after "help_" prefix (handle multi-underscore names)
+    help_section = event.data.decode('utf-8').split("_", 1)[1]
 
     text = ""
     reply_markup = get_back_keyboard()

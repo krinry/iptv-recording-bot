@@ -2,6 +2,9 @@ import sys
 import logging
 import warnings
 import asyncio
+
+# Prevent bytecode caching to ensure latest code changes are loaded
+#sys.dont_write_bytecode = True
 from telethon.sync import TelegramClient
 from telethon.sessions import StringSession
 from telethon import events

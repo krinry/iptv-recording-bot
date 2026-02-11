@@ -6,7 +6,7 @@ from telethon.sync import TelegramClient
 from telethon.tl.types import DocumentAttributeVideo
 from telethon.sessions import StringSession
 from telethon.errors.rpcerrorlist import FloodWaitError
-from config import API_ID, API_HASH, SESSION_NAME, STORE_CHANNEL_ID, BOT_TOKEN, SESSION_STRING
+from config import API_ID, API_HASH, SESSION_NAME, STORE_CHANNEL_ID, BOT_TOKEN
 from captions import caption_uploaded
 
 # Constants
@@ -31,11 +31,17 @@ class UploadManager:
         if not hasattr(self, 'telethon_client'):
             self.progress_data = {}  # {chat_id: {'msg_id': int, 'user_msg_id': int, 'file': str}}
             self.last_update = {}
-            self.telethon_client = TelegramClient(StringSession(SESSION_STRING), API_ID, API_HASH)
+            self.telethon_client = None 
+
+    def set_client(self, client: TelegramClient):
+        """Set the shared Telethon client"""
+        self.telethon_client = client
 
     async def init_client(self):
+        if not self.telethon_client:
+             raise RuntimeError("Telethon client not set in UploadManager. Call set_client() first.")
         if not self.telethon_client.is_connected():
-            await self.telethon_client.start()
+            await self.telethon_client.connect() # Use connect() instead of start() if already started elsewhere, or just check connectivity
 
     def upload_progress_callback(self, current: int, total: int, chat_id: int, file_name: str):
         """Wrapper to safely call async progress updates from sync context"""

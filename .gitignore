@@ -17,7 +17,12 @@ session_files/
 # Recordings and cache
 recordings/
 playlist_cache/
-recorders/
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+chatbot/data.db
 
 # Logs and temp files
 *.log

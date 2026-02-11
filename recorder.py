@@ -13,96 +13,11 @@ from uploader import send_video
 from telethon.sync import TelegramClient
 from telethon import events, Button
 from telethon.errors.rpcerrorlist import FloodWaitError
-from recorders.recorder_utils import resolve_stream, get_stream_quality
+from recorders.recorder_utils import resolve_stream, get_stream_quality, get_video_duration
 from features.status_broadcast import add_active_recording, remove_active_recording
 import re
 
-def create_progress_bar(progress, length=10):
-    done = int(progress * length)
-    left = length - done
-    return f"[{'█' * done}{'░' * left}]"
-
-def seconds_to_hms(seconds):
-    seconds = int(round(seconds))
-    h = seconds // 3600
-    m = (seconds % 3600) // 60
-    s = seconds % 60
-    return f"{h:02d}:{m:02d}:{s:02d}"
-
-async def get_video_duration(file_path: str) -> Optional[float]:
-    """Gets the duration of a video file using ffprobe."""
-    cmd = [
-        "ffprobe",
-        "-v", "error",
-        "-show_entries", "format=duration",
-        "-of", "default=noprint_wrappers=1:nokey=1",
-        file_path
-    ]
-    try:
-        process = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
-        )
-        stdout, stderr = await process.communicate()
-        if process.returncode == 0:
-            return float(stdout.decode().strip())
-        else:
-            print(f"[Recorder] [ERROR] FFprobe error: {stderr.decode().strip()}")
-            return None
-    except FileNotFoundError:
-        print("[Recorder] [ERROR] ffprobe not found. Please ensure FFmpeg is installed and in your PATH.")
-        return None
-    except Exception as e:
-        print(f"[Recorder] [ERROR] Error getting video duration: {e}")
-        return None
-
-def caption_recording_started(title, channel, duration_sec, start_time_str):
-    duration_hms = "Unlimited" if duration_sec == 0 else seconds_to_hms(duration_sec)
-    return (
-        f"🎬 **Recording Started**\n\n"
-        f"📌 **Title:** `{title}`\n"
-        f"📺 **Channel:** `{channel}`\n"
-        f"⏱ **Duration:** `{duration_hms}`\n"
-        f"⏰ **Started At:** `{start_time_str}`\n\n"
-        f"🔄 **Status:** Preparing to record..."
-    )
-
-def caption_recording_progress(title, channel, total_duration, start_time_str, elapsed_sec, remaining_sec, error_msg=None):
-    progress = min(elapsed_sec / total_duration, 1)
-    progress_bar = create_progress_bar(progress)
-    
-    elapsed_hms = seconds_to_hms(elapsed_sec)
-    remaining_hms = seconds_to_hms(remaining_sec)
-    total_hms = seconds_to_hms(total_duration)
-    
-    status = "❌ Failed" if error_msg else "🔄 Recording..."
-    error_line = f"\n❗ **Error:** `{error_msg}`" if error_msg else ""
-    
-    return (
-        f"⏳ **Recording in Progress**\n\n"
-        f"📌 **Title:** `{title}`\n"
-        f"📺 **Channel:** `{channel}`\n"
-        f"⏱ **Duration:** `{total_hms}`\n"
-        f"⏰ **Started At:** `{start_time_str}`\n\n"
-        f"[{progress_bar}] {progress * 100:.1f}%\n"
-        f"▶️ **Elapsed:** `{elapsed_hms}`\n"
-        f"⏭ **Remaining:** `{remaining_hms}`\n\n"
-        f"**Status:** {status}{error_line}"
-    )
-
-def caption_recording_completed(title, channel, duration_sec, start_time_str):
-    duration_hms = seconds_to_hms(duration_sec)
-    end_time_str = datetime.now().strftime("%d-%m-%Y %H:%M:%S")
-    return (
-        f"✅ **Recording Completed**\n\n"
-        f"📌 **Title:** `{title}`\n"
-        f"📺 **Channel:** `{channel}`\n"
-        f"⏱  **Duration:** `{duration_hms}`\n"
-        f"⏰ **Started At:** `{start_time_str}`\n"
-        f"🕒 **Ended At:** `{end_time_str}`\n\n"
-        f"📤 **Status:** Preparing for upload..."
-    )
+from captions import create_progress_bar, seconds_to_hms, caption_recording_started, caption_recording_progress, caption_recording_completed
 
 async def start_recording(telethon_client: TelegramClient, url: str, duration: str, channel: str, title: str, chat_id: int, message_id: int, scheduled_jobs: Dict[int, Dict[str, any]], split_duration_sec: int = None):
     recording_message = None
@@ -307,6 +222,14 @@ async def start_recording(telethon_client: TelegramClient, url: str, duration: s
             part_num = f" part {i+1}" if len(files_to_upload) > 1 else ""
             final_filename = f"{sanitized_title}{part_num}.{sanitized_channel}.{now.strftime(time_format)}-{end_time.strftime(time_format) if not is_unlimited else 'UNLIMITED'}.{now.strftime('%d-%m-%Y')}.{int(now.timestamp())}.IPTV.WEB-DL.@Krinry123.mkv"
             output_path = os.path.join(RECORDINGS_DIR, final_filename)
+            
+            # Remove target file if it already exists
+            if os.path.exists(output_path):
+                try:
+                    os.remove(output_path)
+                except Exception as e:
+                    print(f"[Recorder] [WARNING] Could not remove existing file: {e}")
+            
             os.rename(file_path, output_path)
 
             thumbnail_path = os.path.join(RECORDINGS_DIR, f"{final_filename}.jpg")
@@ -322,7 +245,7 @@ async def start_recording(telethon_client: TelegramClient, url: str, duration: s
                 actual_duration = split_duration_sec if split_duration_sec else total_seconds
 
             readable_duration = seconds_to_hms(actual_duration)
-            readable_size = format_bytes(os.path.getsize(output_path))
+            readable_size = await format_bytes(os.path.getsize(output_path))
 
             caption = f"`📁 Filename: {final_filename}\n⏱ Duration: {readable_duration}\n💾 File-Size: {readable_size}`\n☎️ @krinry123"
 

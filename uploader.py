@@ -5,7 +5,7 @@ from typing import Optional, List, Dict
 from telethon.sync import TelegramClient
 from telethon.tl.types import DocumentAttributeVideo
 from telethon.sessions import StringSession
-from telethon.errors.rpcerrorlist import FloodWaitError
+from telethon.errors.rpcerrorlist import FloodWaitError, MessageNotModifiedError
 from config import API_ID, API_HASH, SESSION_NAME, STORE_CHANNEL_ID, BOT_TOKEN
 from captions import caption_uploaded
 
@@ -15,6 +15,7 @@ MAX_FILE_SIZE = 2 * 1024 * 1024 * 1024  # 2 GB
 class UploadManager:
     _instance = None
     _lock = asyncio.Lock()
+    _active_uploads = set() # Track active uploads by file path
 
     def __new__(cls):
         if cls._instance is None:
@@ -101,9 +102,12 @@ class UploadManager:
                     message=progress_text,
                 )
                 self.progress_data[chat_id]['msg_id'] = message.id
+                self.progress_data[chat_id]['msg_id'] = message.id
         except FloodWaitError as fwe:
             print(f"[Uploader] [WARNING] FloodWaitError while updating upload progress: {fwe}")
             await asyncio.sleep(fwe.seconds)
+        except MessageNotModifiedError:
+            pass # Ignore if content hasn't changed
         except Exception as e:
             print(f"[Uploader] [ERROR] Progress update failed: {e}")
 
@@ -150,6 +154,8 @@ class UploadManager:
                     message=self.progress_data[chat_id]['msg_id'],
                     text=final_text,
                 )
+            except MessageNotModifiedError:
+                pass # Already updated
             except Exception as edit_err:
                 # If edit fails, send new final message
                 print(f"[Uploader] [ERROR] Final message edit failed: {edit_err}")
@@ -246,6 +252,7 @@ class UploadManager:
 
                 result = await self.telethon_client.upload_file(
                     file=file_path,
+                    part_size_kb=4096, # 4MB chunks for faster upload on VPS
                     progress_callback=lambda current, total: self.upload_progress_callback(current, total, chat_id, file_name)
                 )
 
@@ -289,8 +296,18 @@ class UploadManager:
             return None
 
         file_name = os.path.basename(file_path)
+        
+        if file_path in self._active_uploads:
+            print(f"[Uploader] [WARNING] Upload already in progress for {file_name}. Skipping duplicate request.")
+            return None
+
+        self._active_uploads.add(file_path)
         print(f"[Uploader] [INFO] Uploading {file_name} using Telethon (user session).")
-        return await self._send_video_telethon_user_session(file_path, caption, thumbnail, duration, chat_id, user_msg_id)
+        try:
+            return await self._send_video_telethon_user_session(file_path, caption, thumbnail, duration, chat_id, user_msg_id)
+        finally:
+             if file_path in self._active_uploads:
+                self._active_uploads.remove(file_path)
 
     async def upload_sequence(self, video_list: List[Dict[str, str]], chat_id: int, user_msg_id: Optional[int] = None) -> List[int]:
         """Process multiple videos in sequence"""

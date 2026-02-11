@@ -22,6 +22,8 @@ A powerful Telegram bot for recording IPTV/M3U8 streams and uploading them direc
 | 👥 **Multi-Admin** | Support for multiple admins and temporary admin access |
 | 📊 **Logging** | Detailed logging to dedicated log channels |
 | 🗃️ **MongoDB** | Persistent storage for settings and state |
+| 🐧 **Cross-Platform** | Optimized for Windows, Linux, and Android (Termux) |
+| 🚀 **High Performance** | Fast uploads with `tgcrypto` and smart connection pooling |
 
 ---
 
@@ -127,17 +129,27 @@ MONGO_URI=mongodb+srv://username:password@cluster.mongodb.net/
 ---
 
 ## 📱 Bot Commands
-
-| Command | Description |
-|---------|-------------|
-| `/start` | Start the bot |
-| `/help` | Show help message |
-| `/record` | Start recording a stream |
-| `/cancel` | Cancel ongoing recording |
-| `/schedule` | Schedule a recording |
-| `/admin` | Admin panel (admin only) |
-
----
+| Command | Description | Usage |
+|---------|-------------|-------|
+| **Recording** | | |
+| `/rec` | Start recording | `/rec <url> [time] [title]` |
+| `/rd` | Alias for /rec | `/rd <url>` |
+| `/p1`, `/p2`... | Record from playlist | `/p1 <channel_name>` |
+| `/find` | Search channels | `/find <query> [.p1]` |
+| `/cancel` | Cancel recording | Reply to recording message |
+| **Scheduling** | | |
+| `/schedule` | Schedule recording | `/sd "url" DD-MM-YYYY HH:MM:SS duration title` |
+| `/s`, `/sd` | Alias for /schedule | |
+| **Admin** | | |
+| `/addadmin` | Add temp admin | `/addadmin <id> HH:MM:SS` |
+| `/removeadmin` | Remove admin | `/rm <id>` |
+| `/addgroupadmin` | Add group admin | `/addgroupadmin <group_id>` |
+| `/status` | Check resources | `/sts` |
+| `/broadcast` | Broadcast msg | `/bc <message>` |
+| **Files** | | |
+| `/files` | List recordings | `/files` |
+| `/upload` | Upload file | `/upload <filename>` |
+| `/delete` | Delete file | `/delete <filename>` |
 
 ## 🐧 Termux Installation
 

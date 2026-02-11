@@ -13,59 +13,73 @@ Select a category below to see the available commands."""
 def get_recording_help_text():
     return """🎥 **Recording Commands**
 
-`/rd <url> <duration> <title> --split <time>`
-├ Records a stream with optional duration and splitting
+`/rec <url/id> [duration] [title] [--split <time>]`
+Aliases: `/rd`, `/record`
+├ Records a stream.
+└ **Examples:**
+  ├ `/rec http://... 10:00 MyStream`
+  ├ `/rec sony 01:00:00 Movie`
+  └ `/rd news --split 30:00` (Splits every 30m)
 
-
-📝 Examples:
-├ /rd http://... My Stream
-│  ↳ Unlimited recording
-├ /rd http://... 10:00 Ten Min
-│  ↳ Records for 10 minutes
-├ /rd http://... Stream --split 30:00
-│  ↳ Splits every 30 minutes
-└ /rd http://... 02:00:00 Movie --split 01:00:00
-   ↳ 2 hour recording, split hourly
-
-**Scheduled Recording:**
-`/sd <url/id> <datetime> <duration> [title]`
-- **datetime:** In `DD-MM-YYYY HH:MM:SS` format.
+**Shortcuts (Playlist Filtering):**
+`/p1`, `/p2`, `/p3` ...
+├ Equivalent to `/rec` but filters by playlist.
+└ Ex: `/p1 sony 30` (Search 'sony' only in Playlist 1)
 
 **Find Channels:**
-`/find <query>` - Search for channels by name or ID."""
+`/find <query> [.p1]`
+└ Search channel names/IDs.
+  Ex: `/find sports .p2`"""
+
+def get_scheduling_help_text():
+    return """📅 **Scheduling Commands**
+
+`/schedule "url" DD-MM-YYYY HH:MM:SS duration channel title`
+Aliases: `/sd`, `/s`
+├ Schedule a future recording.
+└ **Example:**
+  `/sd "http://..." 25-12-2025 10:00:00 01:00:00 Sports Final Match`
+
+`/cancel [message_id]`
+└  Cancel a scheduled recording. Reply to the scheduled message or provide ID."""
 
 def get_admin_help_text():
     return """🛡️ **Admin Management**
 
-`/add <user_id> [duration]`
-- Adds a temporary admin.
-- **duration:** (Optional) e.g., `1h`, `2d`.
+**Temporary Admin:**
+`/addadmin <user_id> <time>` (Alias: `/add`)
+└ Add temp admin. Ex: `/add 12345 04:00:00`
 
-`/rm <user_id>`
-- Removes an admin or temporary admin.
+`/removeadmin <user_id>` (Alias: `/rm`)
+└ Remove admin access.
 
-`/status`
-`/sts`
-- Check your admin status and remaining time."""
+**Group Admin:**
+`/addgroupadmin <group_id>`
+`/removegroupadmin <group_id>`
 
-def get_messaging_help_text():
-    return """📩 **Messaging Commands**
-
-`/reply <user_id> <message>`
-- Sends a message to a specific user.
-
-`/broadcast <message>`
-`/bd <message>`
-- Sends a message to all users.
-
-**Reply to a forwarded message** to send a response directly to that user."""
+**Status & Broadcast:**
+`/status` (Alias: `/sts`) - Check resources/admin status.
+`/broadcast <msg>` (Alias: `/bc`) - Send msg to all users."""
 
 def get_file_management_help_text():
     return """📁 **File Management**
 
-├ /files - List recorded videos
-├ /upload <file> - Upload a video
-└ /delete <file> - Delete a video"""
+`/files`
+└ List all recorded files in storage.
+
+`/upload <filename>`
+└ Force upload of a specific file.
+
+`/delete <filename>`
+└ Delete a file from storage permanently."""
+
+def get_messaging_help_text():
+    return """📩 **Messaging**
+
+`/reply <user_id> <message>`
+└ Reply to a specific user.
+
+Replying to a forwarded message also works."""
 
 # --- Keyboard Layouts ---
 
@@ -73,12 +87,15 @@ def get_main_keyboard():
     keyboard = [
         [
             Button.inline("🎥 Recording", b"help_recording"),
+            Button.inline("📅 Scheduling", b"help_scheduling"),
+        ],
+        [
             Button.inline("🛡️ Admin", b"help_admin"),
+            Button.inline("📁 Files", b"help_file_management"),
         ],
         [
             Button.inline("📩 Messaging", b"help_messaging"),
-            Button.inline("📁 File Management", b"help_file_management"),
-        ],
+        ]
     ]
     return keyboard
 
@@ -120,6 +137,8 @@ async def help_callback(event: events.CallbackQuery):
         reply_markup = get_main_keyboard()
     elif help_section == "recording":
         text = get_recording_help_text()
+    elif help_section == "scheduling":
+        text = get_scheduling_help_text()
     elif help_section == "admin":
         text = get_admin_help_text()
     elif help_section == "messaging":

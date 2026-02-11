@@ -220,7 +220,7 @@ async def start_recording(telethon_client: TelegramClient, url: str, duration: s
 
         for i, file_path in enumerate(files_to_upload):
             part_num = f" part {i+1}" if len(files_to_upload) > 1 else ""
-            final_filename = f"{sanitized_title}{part_num}.{sanitized_channel}.{now.strftime(time_format)}-{end_time.strftime(time_format) if not is_unlimited else 'UNLIMITED'}.{now.strftime('%d-%m-%Y')}.{int(now.timestamp())}.IPTV.WEB-DL.@Krinry123.mkv"
+            final_filename = f"{sanitized_title}{part_num}.{sanitized_channel}.{now.strftime(time_format)}-{end_time.strftime(time_format) if not is_unlimited else 'UNLIMITED'}.{now.strftime('%d-%m-%Y')}.{int(now.timestamp())}.IPTV.WEB-DL.@Krinry.mkv"
             output_path = os.path.join(RECORDINGS_DIR, final_filename)
             
             # Remove target file if it already exists
@@ -230,7 +230,9 @@ async def start_recording(telethon_client: TelegramClient, url: str, duration: s
                 except Exception as e:
                     print(f"[Recorder] [WARNING] Could not remove existing file: {e}")
             
-            os.rename(file_path, output_path)
+            # Use shutil.move instead of os.rename for cross-filesystem support (needed for Termux/Android)
+            import shutil
+            shutil.move(file_path, output_path)
 
             thumbnail_path = os.path.join(RECORDINGS_DIR, f"{final_filename}.jpg")
             thumbnail_cmd = [
@@ -247,7 +249,7 @@ async def start_recording(telethon_client: TelegramClient, url: str, duration: s
             readable_duration = seconds_to_hms(actual_duration)
             readable_size = await format_bytes(os.path.getsize(output_path))
 
-            caption = f"`📁 Filename: {final_filename}\n⏱ Duration: {readable_duration}\n💾 File-Size: {readable_size}`\n☎️ @krinry123"
+            caption = f"`📁 Filename: {final_filename}\n⏱ Duration: {readable_duration}\n💾 File-Size: {readable_size}`\n☎️ @krinry"
 
             max_retries = 3
             for attempt in range(max_retries):

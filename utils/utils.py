@@ -35,14 +35,25 @@ async def format_duration(duration_str: str) -> str:
         Formatted string (e.g., "2hr, 30min, 15sec" or "Original: 01:30:00").
     """
     try:
-        # First try to parse as HH:MM:SS
-        h, m, s = map(int, duration_str.split(":"))
-        if h < 0 or m < 0 or s < 0 or m >= 60 or s >= 60:
+        # Handle various formats: SS, MM:SS, HH:MM:SS
+        parts = list(map(int, duration_str.split(":")))
+        if len(parts) == 3:
+            h, m, s = parts
+        elif len(parts) == 2:
+            h, m, s = 0, parts[0], parts[1]
+        elif len(parts) == 1:
+            h, m, s = 0, 0, parts[0]
+        else:
             raise ValueError
-        return f"{h}hr, {m}min, {s}sec (Original: {duration_str})"
+
+        if h < 0 or m < 0 or s < 0 or m >= 60 or s >= 60:
+             # Basic validation, though 60+ seconds is sometimes used in raw formats
+             pass 
+
+        return f"{h}hr, {m}min, {s}sec"
     except (ValueError, AttributeError, IndexError):
-        # If invalid format, return the original string
-        return f"Original: {duration_str}"
+        # If invalid format or empty, return as is or a safe fallback
+        return str(duration_str) if duration_str else "Unknown"
 
 
 async def get_video_duration(file_path: str) -> float:

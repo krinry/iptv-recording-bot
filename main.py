@@ -26,9 +26,19 @@ logging.getLogger('telegram.ext').setLevel(logging.WARNING)
 
 logger = logging.getLogger(__name__)
 
+def check_dependencies():
+    """Check for external dependencies like FFmpeg"""
+    import shutil
+    if not shutil.which("ffmpeg"):
+        logger.error("CRITICAL: FFmpeg is not installed or not in PATH. Recording will fail.")
+        logger.error("Please install FFmpeg: https://ffmpeg.org/download.html")
+        sys.exit(1)
+    logger.info("FFmpeg check passed.")
+
 async def main():
     """Main asynchronous bot function"""
     try:
+        check_dependencies()
         logger.info("Initializing bot...")
         logger.info(f"Using session file: {SESSION_FILE_PATH}")
         

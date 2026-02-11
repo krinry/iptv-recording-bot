@@ -1,8 +1,14 @@
 import os
 from dotenv import load_dotenv
 
-# Load environment variables from .env file
-load_dotenv()
+# Load environment variables with priority: .env.local > .env.production > .env
+# This allows local development settings to override production ones
+env_files = ['.env.local', '.env.production', '.env']
+for env_file in env_files:
+    env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), env_file)
+    if os.path.exists(env_path):
+        print(f"Loading environment from: {env_file}")
+        load_dotenv(env_path)
 
 # --- Core Bot Configuration ---
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -22,10 +28,16 @@ if not API_HASH:
     raise ValueError("API_HASH is not set in the environment variables. Get it from https://my.telegram.org")
 
 SESSION_STRING = os.getenv("SESSION_STRING")
-if not SESSION_STRING:
-    raise ValueError("SESSION_STRING is not set. Run generate_session.py to create one.")
+# if not SESSION_STRING:
+#     raise ValueError("SESSION_STRING is not set. Run generate_session.py to create one.")
 
-SESSION_NAME = os.getenv("SESSION_NAME", "session_iptv")
+# Absolute path for session file
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+SESSION_DIR = os.path.join(BASE_DIR, "session_files")
+os.makedirs(SESSION_DIR, exist_ok=True)
+
+SESSION_NAME = os.getenv("SESSION_NAME", "bot_session")
+SESSION_FILE_PATH = os.path.join(SESSION_DIR, SESSION_NAME)
 
 # --- Admin and Channel Configuration ---
 raw_admin_id = os.getenv("ADMIN_ID")

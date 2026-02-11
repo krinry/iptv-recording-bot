@@ -252,7 +252,7 @@ class UploadManager:
 
                 result = await self.telethon_client.upload_file(
                     file=file_path,
-                    part_size_kb=4096, # 4MB chunks for faster upload on VPS
+                    part_size_kb=512, # Max allowed by Telethon is 512KB
                     progress_callback=lambda current, total: self.upload_progress_callback(current, total, chat_id, file_name)
                 )
 

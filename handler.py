@@ -17,6 +17,7 @@ from handlers.help_handler import cancel_recording_callback
 from features.status_broadcast import status_command, broadcast_command
 from handlers.cancel_handler import handle_cancel, handle_cancel_button
 from handlers.file_handler import handle_list_files, handle_upload_file, handle_delete_file
+from chatbot.bot_app import handle_chat_message
 # from features.verify import setup_verify_handlers # To be converted later
 
 def register_handlers(client: TelegramClient):
@@ -47,9 +48,11 @@ def register_handlers(client: TelegramClient):
     client.add_event_handler(handle_cancel_button, events.CallbackQuery(pattern=b'^cancel_recording_'))
     client.add_event_handler(help_callback, events.CallbackQuery(pattern=b'^help_')) # Register help_callback
 
-    # Message Handlers (to be converted later)
-    # for handler in get_message_handlers():
-    #     client.add_event_handler(handler.callback, events.NewMessage(func=lambda e: handler.filters(e)))
+    # AI Chatbot (Krinry) — catch-all for non-command messages (must be LAST)
+    client.add_event_handler(
+        handle_chat_message,
+        events.NewMessage(func=lambda e: e.text and not e.text.startswith('/'))
+    )
 
     # Verify Handlers (to be converted later)
     # setup_verify_handlers(client)

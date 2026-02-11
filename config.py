@@ -78,3 +78,8 @@ VERIFICATION_REWARD_MINUTES = int(os.getenv("VERIFICATION_REWARD_MINUTES", 10))
 
 VERIFICATION_LINKS = {}
 ACTIVE_RECORDINGS = {}
+
+# --- AI Chatbot (Groq) ---
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+if not GROQ_API_KEY:
+    print("Warning: GROQ_API_KEY not set. AI chatbot will be disabled.")

@@ -32,6 +32,7 @@ class UploadManager:
         if not hasattr(self, 'telethon_client'):
             self.progress_data = {}  # {chat_id: {'msg_id': int, 'user_msg_id': int, 'file': str}}
             self.last_update = {}
+            self.speed_data = {}  # {chat_id: {'last_bytes': 0, 'last_time': 0, 'start_time': 0}}
             self.telethon_client = TelegramClient(StringSession(SESSION_STRING), API_ID, API_HASH)
 
     async def init_client(self):
@@ -40,28 +41,49 @@ class UploadManager:
 
     def upload_progress_callback(self, current: int, total: int, chat_id: int, file_name: str):
         """Wrapper to safely call async progress updates from sync context"""
-        # Get the current running event loop
         loop = asyncio.get_running_loop()
-        loop.call_soon_threadsafe(
-            lambda: asyncio.create_task(
-                self.async_upload_progress_callback(current, total, chat_id, file_name)
-            )
-        )
+        loop.create_task(self.async_upload_progress_callback(current, total, chat_id, file_name))
 
     async def async_upload_progress_callback(self, current: int, total: int, chat_id: int, file_name: str):
-        """Enhanced progress callback with better error handling"""
+        """Enhanced progress callback with speed calculation"""
         current_time = asyncio.get_event_loop().time()
         
-        # Throttle updates to every 10 seconds
-        if chat_id in self.last_update and current_time - self.last_update[chat_id] < 10:
+        # Initialize speed data if missing
+        if chat_id not in self.speed_data:
+            self.speed_data[chat_id] = {'last_bytes': 0, 'last_time': current_time, 'start_time': current_time, 'last_console_time': 0}
+
+        data = self.speed_data[chat_id]
+        
+        # Calculate Speed (MB/s)
+        time_diff = current_time - data['last_time']
+        speed_str = "0.0 MB/s"
+        
+        if time_diff > 0.5: # Update speed every 0.5s for accuracy
+            bytes_diff = current - data['last_bytes']
+            speed = (bytes_diff / 1024 / 1024) / time_diff # MB/s
+            speed_str = f"{speed:.2f} MB/s"
+            data['last_bytes'] = current
+            data['last_time'] = current_time
+            data['speed_str'] = speed_str # Cache logic
+        else:
+            speed_str = data.get('speed_str', "Calculating...")
+
+        # Console Update (Every 1 second)
+        if current_time - data.get('last_console_time', 0) >= 1 or current == total:
+            percent = min(100, (current / total) * 100)
+            uploaded_mb = current / 1024 / 1024
+            total_mb = total / 1024 / 1024
+            print(f"[Uploader] [INFO] Uploading {file_name}: {percent:.1f}% | {uploaded_mb:.1f}/{total_mb:.1f} MB | 🚀 {speed_str}")
+            data['last_console_time'] = current_time
+
+        # Telegram Update (Every 3 seconds)
+        if chat_id in self.last_update and current_time - self.last_update[chat_id] < 3:
             return
         
         self.last_update[chat_id] = current_time
         percent = min(100, (current / total) * 100)
         uploaded_mb = current / 1024 / 1024
         total_mb = total / 1024 / 1024
-
-        print(f"[Uploader] [INFO] Uploading {file_name} - {percent:.1f}% ({uploaded_mb:.1f}MB / {total_mb:.1f}MB)")
 
         # Visual progress bar
         bar = '⬢' * int(percent/5) + '⬡' * (20 - int(percent/5))
@@ -70,6 +92,7 @@ class UploadManager:
             f"**📤 Uploading:** `{file_name}`\n"
             f"**📊 Progress:** {percent:.1f}%\n"
             f"🔹 {uploaded_mb:.1f}MB / {total_mb:.1f}MB\n"
+            f"🚀 **Speed:** {speed_str}\n"
             f"{bar}\n"
             f"**⚡ Status:** Uploading..."
         )
@@ -205,73 +228,74 @@ class UploadManager:
                                                 duration: Optional[int] = None, chat_id: int = 0, 
                                                 user_msg_id: Optional[int] = None) -> Optional[int]:
         """Uploads video using Telethon with user session"""
-        async with self._lock:
-            try:
-                file_name = os.path.basename(file_path) if file_path else "Unknown File"
-                # Initialize progress tracking
-                self.progress_data[chat_id] = {
-                    'msg_id': user_msg_id, # Use user_msg_id as initial msg_id
-                    'user_msg_id': user_msg_id,
-                    'file': file_name
-                }
+        try:
+            file_name = os.path.basename(file_path) if file_path else "Unknown File"
+            # Initialize progress tracking
+            self.progress_data[chat_id] = {
+                'msg_id': user_msg_id, # Use user_msg_id as initial msg_id
+                'user_msg_id': user_msg_id,
+                'file': file_name
+            }
+            # Reset speed tracking
+            self.speed_data[chat_id] = {'last_bytes': 0, 'last_time': asyncio.get_event_loop().time(), 'start_time': asyncio.get_event_loop().time(), 'last_console_time': 0}
 
-                if not os.path.exists(file_path):
-                    await self.send_uploaded_message(chat_id, file_name, False, "File not found")
-                    return None
-
-                file_size = os.path.getsize(file_path)
-                if file_size > MAX_FILE_SIZE:
-                    parts = await self._split_video(file_path)
-                    if not parts:
-                        await self.send_uploaded_message(chat_id, file_name, False, "Failed to split video")
-                        return None
-                    
-                    message_ids = []
-                    for i, part_path in enumerate(parts):
-                        part_caption = f"{caption} (Part {i+1}/{len(parts)})"
-                        message_id = await self._send_video_telethon_user_session(
-                            part_path, part_caption, thumbnail, duration, chat_id, user_msg_id
-                        )
-                        if message_id:
-                            message_ids.append(message_id)
-                        if os.path.exists(part_path):
-                            os.remove(part_path)
-                    return message_ids[0] if message_ids else None
-
-                if not self.telethon_client.is_connected():
-                    await self.telethon_client.start()
-
-                thumb = thumbnail if thumbnail and os.path.exists(thumbnail) else None
-
-                result = await self.telethon_client.upload_file(
-                    file=file_path,
-                    progress_callback=lambda current, total: self.upload_progress_callback(current, total, chat_id, file_name)
-                )
-
-                entity = await self.telethon_client.get_entity(STORE_CHANNEL_ID)
-
-                message = await self.telethon_client.send_message(
-                    entity=entity,
-                    message=caption,
-                    file=result,
-                    attributes=[
-                        DocumentAttributeVideo(
-                            duration=duration or 0,
-                            w=0,
-                            h=0,
-                            supports_streaming=True
-                        )
-                    ],
-                    thumb=thumb
-                )
-
-                await self.send_uploaded_message(chat_id, file_name, True)
-                return message.id
-
-            except Exception as e:
-                error_msg = str(e)
-                await self.send_uploaded_message(chat_id, file_name, False, error_msg)
+            if not os.path.exists(file_path):
+                await self.send_uploaded_message(chat_id, file_name, False, "File not found")
                 return None
+
+            file_size = os.path.getsize(file_path)
+            if file_size > MAX_FILE_SIZE:
+                parts = await self._split_video(file_path)
+                if not parts:
+                    await self.send_uploaded_message(chat_id, file_name, False, "Failed to split video")
+                    return None
+                
+                message_ids = []
+                for i, part_path in enumerate(parts):
+                    part_caption = f"{caption} (Part {i+1}/{len(parts)})"
+                    message_id = await self._send_video_telethon_user_session(
+                        part_path, part_caption, thumbnail, duration, chat_id, user_msg_id
+                    )
+                    if message_id:
+                        message_ids.append(message_id)
+                    if os.path.exists(part_path):
+                        os.remove(part_path)
+                return message_ids[0] if message_ids else None
+
+            if not self.telethon_client.is_connected():
+                await self.telethon_client.start()
+
+            thumb = thumbnail if thumbnail and os.path.exists(thumbnail) else None
+
+            result = await self.telethon_client.upload_file(
+                file=file_path,
+                progress_callback=lambda current, total: self.upload_progress_callback(current, total, chat_id, file_name)
+            )
+
+            entity = await self.telethon_client.get_entity(STORE_CHANNEL_ID)
+
+            message = await self.telethon_client.send_message(
+                entity=entity,
+                message=caption,
+                file=result,
+                attributes=[
+                    DocumentAttributeVideo(
+                        duration=duration or 0,
+                        w=0,
+                        h=0,
+                        supports_streaming=True
+                    )
+                ],
+                thumb=thumb
+            )
+
+            await self.send_uploaded_message(chat_id, file_name, True)
+            return message.id
+
+        except Exception as e:
+            error_msg = str(e)
+            await self.send_uploaded_message(chat_id, file_name, False, error_msg)
+            return None
 
     async def send_video(self, file_path: str, caption: str, thumbnail: Optional[str] = None, 
                         duration: Optional[int] = None, chat_id: int = 0, 

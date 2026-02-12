@@ -255,9 +255,11 @@ async def start_recording(telethon_client: TelegramClient, url: str, duration: s
             for attempt in range(max_retries):
                 try:
                     # Uploader uploads to store channel AND forwards to user automatically
+                    # bot_client + status_msg_id = uploader edits the SAME recording message
                     new_message_id = await send_video(
                         output_path, caption, thumbnail=thumbnail_path, duration=int(actual_duration),
-                        chat_id=chat_id, user_msg_id=message_id  # Reply to original user command
+                        chat_id=chat_id, user_msg_id=message_id,
+                        bot_client=telethon_client, status_msg_id=recording_message.id
                     )
                     if new_message_id:
                         break

@@ -121,24 +121,23 @@ class UploadManager:
                     f"**⚡ Status:** Uploading..."
                 )
                 
-                # Use bot_client for edits (separate connection — won't block upload chunks)
-                msg_client = self.bot_client or self.telethon_client
+                # Use user session for edits (same author as the original message)
                 try:
                     if self.progress_data[chat_id]['msg_id'] is not None:
-                        await msg_client.edit_message(
+                        await self.telethon_client.edit_message(
                             entity=chat_id,
                             message=self.progress_data[chat_id]['msg_id'],
                             text=progress_text,
                         )
                     elif self.progress_data[chat_id]['user_msg_id'] is not None:
-                        await msg_client.edit_message(
+                        await self.telethon_client.edit_message(
                             entity=chat_id,
                             message=self.progress_data[chat_id]['user_msg_id'],
                             text=progress_text,
                         )
                         self.progress_data[chat_id]['msg_id'] = self.progress_data[chat_id]['user_msg_id']
                     else:
-                        message = await msg_client.send_message(
+                        message = await self.telethon_client.send_message(
                             entity=chat_id,
                             message=progress_text,
                         )
@@ -155,7 +154,6 @@ class UploadManager:
 
     async def send_uploaded_message(self, chat_id: int, file_name: str, success: bool = True, error_msg: str = None):
         """Enhanced final message with better formatting"""
-        msg_client = self.bot_client or self.telethon_client
         try:
             if chat_id not in self.progress_data or self.progress_data[chat_id]['msg_id'] is None:
                 # If no message ID to edit, send a new message
@@ -171,7 +169,7 @@ class UploadManager:
                         "❌ **Upload Failed!**\n"
                         f"⚠️ **Reason:** {error_msg or 'Unknown error'}"
                     )
-                await msg_client.send_message(
+                await self.telethon_client.send_message(
                     entity=chat_id,
                     message=final_text,
                     reply_to=self.progress_data.get(chat_id, {}).get('user_msg_id'),
@@ -192,7 +190,7 @@ class UploadManager:
                 )
 
             try:
-                await msg_client.edit_message(
+                await self.telethon_client.edit_message(
                     entity=chat_id,
                     message=self.progress_data[chat_id]['msg_id'],
                     text=final_text,
@@ -202,7 +200,7 @@ class UploadManager:
             except Exception as edit_err:
                 # If edit fails, send new final message
                 print(f"[Uploader] [ERROR] Final message edit failed: {edit_err}")
-                await msg_client.send_message(
+                await self.telethon_client.send_message(
                     entity=chat_id,
                     message=final_text,
                     reply_to=self.progress_data[chat_id]['user_msg_id'],

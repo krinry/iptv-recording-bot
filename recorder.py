@@ -66,6 +66,10 @@ async def start_recording(telethon_client: TelegramClient, url: str, duration: s
                 reply_to=message_id
             )
 
+        # Register status_msg_id so cancel button can edit this message
+        if message_id in scheduled_jobs:
+            scheduled_jobs[message_id]['status_msg_id'] = recording_message.id
+
         async def update_caption(caption_text, buttons=None):
             nonlocal last_caption
             if caption_text != last_caption:
@@ -106,12 +110,9 @@ async def start_recording(telethon_client: TelegramClient, url: str, duration: s
                         last_update_time = current_time
                 else: # Unlimited recording
                     if current_time - last_update_time >= 10:
-                        caption_text = f"🎬 **Recording Started**\n\n" \
-                                       f"📌 **Title:** `{title}`\n" \
-                                       f"📺 **Channel:** `{channel}`\n" \
-                                       f"⏱ **Duration:** `Unlimited`\n" \
-                                       f"⏰ **Started At:** `{start_time_str}`\n\n" \
-                                       f"▶️ **Elapsed:** `{seconds_to_hms(elapsed)}`"
+                        caption_text = caption_recording_progress(
+                            title, channel, 0, start_time_str, elapsed, 0
+                        )
                         buttons = [Button.inline("❌ Cancel", data=f"cancel_recording_{message_id}")]
                         await update_caption(caption_text, buttons)
                         last_update_time = current_time
@@ -277,7 +278,14 @@ async def start_recording(telethon_client: TelegramClient, url: str, duration: s
 
     except asyncio.CancelledError:
         progress_task.cancel()
-        await update_caption("❌ Recording Cancelled")
+        cancel_caption = (
+            "⏹ **CANCELLED**\n"
+            "━━━━━━━━━━━━━━━━━━━\n\n"
+            f"📌 `{title}`\n"
+            f"📡 `{channel}`\n\n"
+            "🚫 Recording was cancelled."
+        )
+        await update_caption(cancel_caption)
         if process:
             try:
                 process.terminate()

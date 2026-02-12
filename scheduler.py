@@ -5,7 +5,8 @@ from recorder import start_recording
 from typing import Dict, Optional
 from telethon.sync import TelegramClient
 
-scheduled_jobs: Dict[int, Dict[str, any]] = {}  # key = message_id, value = {'task': asyncio.Task, 'process': asyncio.subprocess.Process, 'user_id': int}
+# key = message_id, value = {'task', 'process', 'user_id', 'status_msg_id'}
+scheduled_jobs: Dict[int, Dict[str, any]] = {}
 
 def get_ist_datetime(date_time_str: str) -> datetime:
     """Parse string datetime and convert to IST timezone"""
@@ -28,7 +29,12 @@ async def start_recording_instantly(
     task = asyncio.create_task(start_recording(telethon_client, url, duration, channel, title, chat_id, message_id, scheduled_jobs, split_duration_sec))
     
     if message_id:
-        scheduled_jobs[message_id] = {'task': task, 'process': None, 'user_id': user_id}
+        scheduled_jobs[message_id] = {
+            'task': task, 
+            'process': None, 
+            'user_id': user_id,
+            'status_msg_id': None,  # Will be set by recorder when it sends the status message
+        }
     
     return task
 
@@ -60,7 +66,12 @@ async def schedule_recording(
     task = asyncio.create_task(delayed_recording())
     
     if message_id:
-        scheduled_jobs[message_id] = {'task': task, 'process': None, 'user_id': user_id}
+        scheduled_jobs[message_id] = {
+            'task': task, 
+            'process': None, 
+            'user_id': user_id,
+            'status_msg_id': None,
+        }
 
     print(f"Recording scheduled at {target_time} IST for {duration}")
     return task
@@ -69,8 +80,11 @@ def cancel_scheduled_recording(message_id: int):
     """Cancel a scheduled recording by its message ID"""
     if message_id in scheduled_jobs:
         job = scheduled_jobs[message_id]
-        job['task'].cancel()
-        if job['process']:
+        # Cancel the async task
+        if job.get('task'):
+            job['task'].cancel()
+        # Terminate FFmpeg process
+        if job.get('process'):
             try:
                 job['process'].terminate()
             except ProcessLookupError:

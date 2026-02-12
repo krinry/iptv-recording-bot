@@ -2,23 +2,18 @@ from telethon.sync import TelegramClient
 from telethon import events
 from telethon.tl.custom import Button
 
-# Import handler functions (will be modified to accept Telethon events)
+# Import handler functions
 from handlers.start_handler import start
 from handlers.admin_handler import handle_admin_request
-from handlers.help_handler import send_help, help_callback # Import help_callback
+from handlers.help_handler import send_help, help_callback
 from handlers.schedule_handler import handle_schedule
-from handlers.record_handler import handle_instant_record
+from handlers.record_handler import handle_instant_record, handle_find_channel, show_help
 from handlers.temp_admin_handler import add_temp_admin_command, remove_admin_command
 from handlers.group_admin_handler import add_group_admin_command, remove_group_admin_command
-# from features.messaging import get_message_handlers # To be converted later
-from handlers.record_handler import handle_find_channel
-from handlers.record_handler import show_help
-from handlers.help_handler import cancel_recording_callback
 from features.status_broadcast import status_command, broadcast_command
 from handlers.cancel_handler import handle_cancel, handle_cancel_button
 from handlers.file_handler import handle_list_files, handle_upload_file, handle_delete_file
 from chatbot.bot_app import handle_chat_message
-# from features.verify import setup_verify_handlers # To be converted later
 
 def register_handlers(client: TelegramClient):
     """Register all handlers with the Telethon client"""

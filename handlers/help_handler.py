@@ -152,30 +152,3 @@ async def help_callback(event: events.CallbackQuery):
         parse_mode="Markdown",
         link_preview=False,
     )
-
-async def cancel_recording_callback(event: events.CallbackQuery):
-    await event.answer()
-    user_id = event.sender_id
-    chat_id = int(event.data.decode('utf-8').split("_")[-1])
-    
-    # Check authorization
-    if user_id != chat_id and not await is_admin(user_id, chat_id):
-        await event.answer("You are not authorized to cancel this recording.", alert=True)
-        return
-
-    # Cancel the recording
-    # This part needs access to the recording process, which is currently in context.chat_data
-    # This will need to be refactored to use a global or shared state for active recordings.
-    # For now, I'll leave a placeholder for the cancellation logic.
-    # recording_process = context.chat_data.get('recording_process')
-    # if recording_process:
-    #     try:
-    #         recording_process.terminate()
-    #         await event.answer("Recording cancelled successfully", alert=True)
-    #         await event.edit("⏹ Recording cancelled by user/admin.")
-    #     except Exception as e:
-    #         await event.answer(f"Error cancelling: {str(e)}", alert=True)
-    # else:
-    #     await event.answer("No active recording to cancel", alert=True)
-    
-    await event.edit("⏹ Recording cancellation logic needs to be implemented with Telethon.")

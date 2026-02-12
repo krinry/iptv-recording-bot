@@ -6,7 +6,7 @@ async def start(event: events.NewMessage):
     user = await event.get_sender()
     
     keyboard = [
-        [Button.url("Help / Contact Developer", "https://t.me/krinry123")],
+        [Button.url("Help / Contact Developer", "https://t.me/krinry")],
         [Button.inline("Request Admin Access", b"request_admin")]
     ]
     

@@ -91,7 +91,7 @@ async def handle_admin_request(event: events.CallbackQuery):
     )
 
 # Add the inline keyboard button
-    keyboard = [[Button.url("Help / Contact Developer", "https://t.me/krinry123")]]
+    keyboard = [[Button.url("Help / Contact Developer", "https://t.me/krinry")]]
 
     try:
         await event.client.send_message(

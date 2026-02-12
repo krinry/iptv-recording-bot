@@ -9,3 +9,4 @@ aiofiles
 aiohttp
 pymongo
 motor
+psutil

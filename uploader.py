@@ -45,7 +45,7 @@ class UploadManager:
         # Speed tracking (pure sync — no async work)
         now = time.time()
         if chat_id not in self._speed_data:
-            self._speed_data[chat_id] = {'last_bytes': 0, 'last_time': now, 'start_time': now, 'last_console': 0, 'speed': 0.0}
+            self._speed_data[chat_id] = {'last_bytes': 0, 'last_time': now, 'start_time': now, 'last_console': 0, 'last_tg_update': 0, 'speed': 0.0}
         
         sd = self._speed_data[chat_id]
         td = now - sd['last_time']
@@ -67,13 +67,16 @@ class UploadManager:
             print(f"[Uploader] [INFO] {file_name}: {pct:.1f}% | {current/1048576:.1f}/{total/1048576:.1f} MB | 🚀 {sd['speed']:.2f} MB/s | ⏱️ ETA: {eta_str}")
             sd['last_console'] = now
 
-        # Schedule Telegram update (original working method)
-        loop = asyncio.get_running_loop()
-        loop.call_soon_threadsafe(
-            lambda: asyncio.create_task(
-                self.async_upload_progress_callback(current, total, chat_id, file_name)
+        # Schedule Telegram update only every 4 seconds (reduces async overhead dramatically)
+        # Always update on completion (current == total)
+        if current == total or now - sd.get('last_tg_update', 0) >= 4:
+            sd['last_tg_update'] = now
+            loop = asyncio.get_running_loop()
+            loop.call_soon_threadsafe(
+                lambda: asyncio.create_task(
+                    self.async_upload_progress_callback(current, total, chat_id, file_name)
+                )
             )
-        )
 
     async def async_upload_progress_callback(self, current: int, total: int, chat_id: int, file_name: str):
         """Enhanced progress callback with better error handling"""
@@ -275,6 +278,8 @@ class UploadManager:
             async with self._lock:
                 result = await self.telethon_client.upload_file(
                     file=file_path,
+                    part_size_kb=512,  # Max chunk size (512KB) = 4x fewer API calls than default 128KB
+                    file_size=file_size,  # Pre-provide size so Telethon skips stat() call
                     progress_callback=lambda current, total: self.upload_progress_callback(current, total, chat_id, file_name)
                 )
 
@@ -294,6 +299,19 @@ class UploadManager:
                     ],
                     thumb=thumb
                 )
+
+            # Forward to user's chat using cached media reference (instant — no re-upload)
+            if chat_id and str(chat_id) != str(STORE_CHANNEL_ID):
+                try:
+                    await self.telethon_client.send_message(
+                        entity=chat_id,
+                        message=caption,
+                        file=message.media,
+                        reply_to=user_msg_id
+                    )
+                    print(f"[Uploader] [INFO] ✅ Forwarded to user chat {chat_id}")
+                except Exception as fwd_err:
+                    print(f"[Uploader] [WARNING] Forward to user failed: {fwd_err}")
 
             # Send completion message outside the lock so it doesn't block other uploads
             await self.send_uploaded_message(chat_id, file_name, True)

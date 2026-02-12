@@ -254,24 +254,18 @@ async def start_recording(telethon_client: TelegramClient, url: str, duration: s
             max_retries = 3
             for attempt in range(max_retries):
                 try:
+                    # Uploader uploads to store channel AND forwards to user automatically
                     new_message_id = await send_video(
                         output_path, caption, thumbnail=thumbnail_path, duration=int(actual_duration),
-                        chat_id=chat_id, user_msg_id=recording_message.id
+                        chat_id=chat_id, user_msg_id=message_id  # Reply to original user command
                     )
                     if new_message_id:
-                        uploaded_message = await telethon_client.get_messages(STORE_CHANNEL_ID, ids=new_message_id)
-                        if uploaded_message:
-                            await telethon_client.send_message(
-                                entity=chat_id,
-                                message=uploaded_message.message,
-                                file=uploaded_message.media,
-                                reply_to=message_id
-                            )
                         break
                 except Exception as upload_error:
+                    print(f"[Recorder] [WARNING] Upload attempt {attempt+1}/{max_retries} failed: {upload_error}")
                     if attempt == max_retries - 1:
                         error_msg = f"❌ Upload failed: {str(upload_error)}"
-                        # update caption with error
+                        await update_caption(error_msg)
                     await asyncio.sleep(5)
             
             if os.path.exists(output_path): os.remove(output_path)

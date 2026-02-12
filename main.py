@@ -8,7 +8,7 @@ import asyncio
 from telethon.sync import TelegramClient
 from telethon.sessions import StringSession
 from telethon import events
-from config import API_ID, API_HASH, BOT_TOKEN, SESSION_FILE_PATH
+from config import API_ID, API_HASH, BOT_TOKEN, SESSION_STRING
 
 # Configure logging and warnings
 logging.basicConfig(
@@ -40,17 +40,14 @@ async def main():
     try:
         check_dependencies()
         logger.info("Initializing bot...")
-        logger.info(f"Using session file: {SESSION_FILE_PATH}")
         
-        # Initialize Telethon client with absolute file path
-        # This resolves the issue of session file location on restarts
-        client = TelegramClient(SESSION_FILE_PATH, API_ID, API_HASH)
+        # Initialize Telethon client (same as old working code)
+        client = TelegramClient(StringSession(SESSION_STRING), API_ID, API_HASH)
         await client.start(bot_token=BOT_TOKEN)
 
-        # Initialize uploader's own user session client + give it the bot client for messages
+        # Initialize uploader's own user session client
         from uploader import upload_manager
-        upload_manager.set_bot_client(client)  # Bot client for progress messages (separate connection)
-        await upload_manager.init_client()     # User session for uploads (fast)
+        await upload_manager.init_client()
         
         logger.info("Bot is running. Press Ctrl+C to stop.")
         

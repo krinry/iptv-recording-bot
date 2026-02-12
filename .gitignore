@@ -1,7 +1,7 @@
 # ================================
 # IPTV Recording Bot - Project Specific
 # ================================
-
+old_code/
 # Environment files (NEVER commit these!)
 .env
 .env.local

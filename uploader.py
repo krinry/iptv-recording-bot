@@ -6,7 +6,7 @@ from telethon.sync import TelegramClient
 from telethon.tl.types import DocumentAttributeVideo
 from telethon.sessions import StringSession
 from telethon.errors.rpcerrorlist import FloodWaitError, MessageNotModifiedError
-from config import API_ID, API_HASH, SESSION_NAME, STORE_CHANNEL_ID, BOT_TOKEN
+from config import API_ID, API_HASH, SESSION_NAME, STORE_CHANNEL_ID, BOT_TOKEN, SESSION_STRING
 from captions import caption_uploaded
 
 # Constants
@@ -15,7 +15,7 @@ MAX_FILE_SIZE = 2 * 1024 * 1024 * 1024  # 2 GB
 class UploadManager:
     _instance = None
     _lock = asyncio.Lock()
-    _active_uploads = set() # Track active uploads by file path
+    _active_uploads = set()  # Track active uploads to prevent duplicates
 
     def __new__(cls):
         if cls._instance is None:
@@ -32,17 +32,11 @@ class UploadManager:
         if not hasattr(self, 'telethon_client'):
             self.progress_data = {}  # {chat_id: {'msg_id': int, 'user_msg_id': int, 'file': str}}
             self.last_update = {}
-            self.telethon_client = None 
-
-    def set_client(self, client: TelegramClient):
-        """Set the shared Telethon client"""
-        self.telethon_client = client
+            self.telethon_client = TelegramClient(StringSession(SESSION_STRING), API_ID, API_HASH)
 
     async def init_client(self):
-        if not self.telethon_client:
-             raise RuntimeError("Telethon client not set in UploadManager. Call set_client() first.")
         if not self.telethon_client.is_connected():
-            await self.telethon_client.connect() # Use connect() instead of start() if already started elsewhere, or just check connectivity
+            await self.telethon_client.start()
 
     def upload_progress_callback(self, current: int, total: int, chat_id: int, file_name: str):
         """Wrapper to safely call async progress updates from sync context"""
@@ -102,12 +96,11 @@ class UploadManager:
                     message=progress_text,
                 )
                 self.progress_data[chat_id]['msg_id'] = message.id
-                self.progress_data[chat_id]['msg_id'] = message.id
         except FloodWaitError as fwe:
             print(f"[Uploader] [WARNING] FloodWaitError while updating upload progress: {fwe}")
             await asyncio.sleep(fwe.seconds)
         except MessageNotModifiedError:
-            pass # Ignore if content hasn't changed
+            pass  # Already up to date, ignore
         except Exception as e:
             print(f"[Uploader] [ERROR] Progress update failed: {e}")
 
@@ -155,7 +148,7 @@ class UploadManager:
                     text=final_text,
                 )
             except MessageNotModifiedError:
-                pass # Already updated
+                pass  # Already updated
             except Exception as edit_err:
                 # If edit fails, send new final message
                 print(f"[Uploader] [ERROR] Final message edit failed: {edit_err}")
@@ -252,7 +245,6 @@ class UploadManager:
 
                 result = await self.telethon_client.upload_file(
                     file=file_path,
-                    part_size_kb=512, # Max allowed by Telethon is 512KB
                     progress_callback=lambda current, total: self.upload_progress_callback(current, total, chat_id, file_name)
                 )
 
@@ -296,9 +288,10 @@ class UploadManager:
             return None
 
         file_name = os.path.basename(file_path)
-        
+
+        # Prevent duplicate uploads
         if file_path in self._active_uploads:
-            print(f"[Uploader] [WARNING] Upload already in progress for {file_name}. Skipping duplicate request.")
+            print(f"[Uploader] [WARNING] Upload already in progress for {file_name}. Skipping duplicate.")
             return None
 
         self._active_uploads.add(file_path)
@@ -306,8 +299,7 @@ class UploadManager:
         try:
             return await self._send_video_telethon_user_session(file_path, caption, thumbnail, duration, chat_id, user_msg_id)
         finally:
-             if file_path in self._active_uploads:
-                self._active_uploads.remove(file_path)
+            self._active_uploads.discard(file_path)
 
     async def upload_sequence(self, video_list: List[Dict[str, str]], chat_id: int, user_msg_id: Optional[int] = None) -> List[int]:
         """Process multiple videos in sequence"""
@@ -372,7 +364,7 @@ if __name__ == "__main__":
         await upload_videos(videos, chat_id=12345, user_msg_id=67890)
 
         # Clean up dummy files
-        os.remove(small_file_path)
-        os.remove(large_file_path)
+        #os.remove(small_file_path)
+        #os.remove(large_file_path)
 
     asyncio.run(test_upload())

@@ -47,9 +47,8 @@ async def main():
         client = TelegramClient(SESSION_FILE_PATH, API_ID, API_HASH)
         await client.start(bot_token=BOT_TOKEN)
 
-        # Initialize and start uploader's Telethon client using the SAME client instance
+        # Initialize uploader's own user session client
         from uploader import upload_manager
-        upload_manager.set_client(client)
         await upload_manager.init_client()
         
         logger.info("Bot is running. Press Ctrl+C to stop.")

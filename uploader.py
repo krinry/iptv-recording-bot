@@ -15,7 +15,7 @@ MAX_FILE_SIZE = 2 * 1024 * 1024 * 1024  # 2 GB
 
 class UploadManager:
     _instance = None
-    _lock = asyncio.Lock()
+    _lock = asyncio.Semaphore(1)
     _active_uploads = set()
 
     def __new__(cls):
@@ -110,6 +110,8 @@ class UploadManager:
         )
 
         try:
+            if chat_id not in self.progress_data:
+                return
             if self.progress_data[chat_id]['msg_id'] is not None:
                 # Edit our own progress message (safe — we authored it)
                 await self.telethon_client.edit_message(
@@ -232,44 +234,45 @@ class UploadManager:
                                                 duration: Optional[int] = None, chat_id: int = 0, 
                                                 user_msg_id: Optional[int] = None) -> Optional[int]:
         """Uploads video using Telethon with user session"""
-        async with self._lock:
-            try:
-                file_name = os.path.basename(file_path) if file_path else "Unknown File"
-                self.progress_data[chat_id] = {
-                    'msg_id': None,  # Don't edit bot's message — user session will send its OWN
-                    'user_msg_id': user_msg_id,
-                    'file': file_name
-                }
-                self._speed_data.pop(chat_id, None)  # Reset speed
+        file_name = os.path.basename(file_path) if file_path else "Unknown File"
+        try:
+            self.progress_data[chat_id] = {
+                'msg_id': None,
+                'user_msg_id': user_msg_id,
+                'file': file_name
+            }
+            self._speed_data.pop(chat_id, None)  # Reset speed
 
-                if not os.path.exists(file_path):
-                    await self.send_uploaded_message(chat_id, file_name, False, "File not found")
+            if not os.path.exists(file_path):
+                await self.send_uploaded_message(chat_id, file_name, False, "File not found")
+                return None
+
+            file_size = os.path.getsize(file_path)
+            if file_size > MAX_FILE_SIZE:
+                parts = await self._split_video(file_path)
+                if not parts:
+                    await self.send_uploaded_message(chat_id, file_name, False, "Failed to split video")
                     return None
+                
+                message_ids = []
+                for i, part_path in enumerate(parts):
+                    part_caption = f"{caption} (Part {i+1}/{len(parts)})"
+                    message_id = await self._send_video_telethon_user_session(
+                        part_path, part_caption, thumbnail, duration, chat_id, user_msg_id
+                    )
+                    if message_id:
+                        message_ids.append(message_id)
+                    if os.path.exists(part_path):
+                        os.remove(part_path)
+                return message_ids[0] if message_ids else None
 
-                file_size = os.path.getsize(file_path)
-                if file_size > MAX_FILE_SIZE:
-                    parts = await self._split_video(file_path)
-                    if not parts:
-                        await self.send_uploaded_message(chat_id, file_name, False, "Failed to split video")
-                        return None
-                    
-                    message_ids = []
-                    for i, part_path in enumerate(parts):
-                        part_caption = f"{caption} (Part {i+1}/{len(parts)})"
-                        message_id = await self._send_video_telethon_user_session(
-                            part_path, part_caption, thumbnail, duration, chat_id, user_msg_id
-                        )
-                        if message_id:
-                            message_ids.append(message_id)
-                        if os.path.exists(part_path):
-                            os.remove(part_path)
-                    return message_ids[0] if message_ids else None
+            if not self.telethon_client.is_connected():
+                await self.telethon_client.start()
 
-                if not self.telethon_client.is_connected():
-                    await self.telethon_client.start()
+            thumb = thumbnail if thumbnail and os.path.exists(thumbnail) else None
 
-                thumb = thumbnail if thumbnail and os.path.exists(thumbnail) else None
-
+            # Only hold the lock during the actual upload + send, not during split/recursion
+            async with self._lock:
                 result = await self.telethon_client.upload_file(
                     file=file_path,
                     progress_callback=lambda current, total: self.upload_progress_callback(current, total, chat_id, file_name)
@@ -292,13 +295,22 @@ class UploadManager:
                     thumb=thumb
                 )
 
-                await self.send_uploaded_message(chat_id, file_name, True)
-                return message.id
+            # Send completion message outside the lock so it doesn't block other uploads
+            await self.send_uploaded_message(chat_id, file_name, True)
+            return message.id
 
-            except Exception as e:
-                error_msg = str(e)
+        except Exception as e:
+            error_msg = str(e)
+            try:
                 await self.send_uploaded_message(chat_id, file_name, False, error_msg)
-                return None
+            except Exception:
+                print(f"[Uploader] [ERROR] Failed to send error message: {error_msg}")
+            return None
+        finally:
+            # Always cleanup to prevent stale data from blocking future operations
+            self.progress_data.pop(chat_id, None)
+            self.last_update.pop(chat_id, None)
+            self._speed_data.pop(chat_id, None)
 
     async def send_video(self, file_path: str, caption: str, thumbnail: Optional[str] = None, 
                         duration: Optional[int] = None, chat_id: int = 0, 

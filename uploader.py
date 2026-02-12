@@ -1,4 +1,5 @@
 import os
+import time
 import asyncio
 import subprocess
 from typing import Optional, List, Dict
@@ -31,104 +32,130 @@ class UploadManager:
     def __init__(self):
         if not hasattr(self, 'telethon_client'):
             self.progress_data = {}  # {chat_id: {'msg_id': int, 'user_msg_id': int, 'file': str}}
-            self.last_update = {}
-            self.speed_data = {}  # {chat_id: {'last_bytes': 0, 'last_time': 0, 'start_time': 0}}
+            self._upload_state = {}  # {chat_id: {'current': 0, 'total': 0, ...}} — shared with poller
             self.telethon_client = TelegramClient(StringSession(SESSION_STRING), API_ID, API_HASH)
+            self.bot_client = None  # Separate bot connection for progress messages
+
+    def set_bot_client(self, client):
+        """Set the bot client for progress message edits (separate connection from upload)"""
+        self.bot_client = client
+        print('[Uploader] [INFO] ✅ Bot client set for progress messages (separate connection)')
 
     async def init_client(self):
         if not self.telethon_client.is_connected():
             await self.telethon_client.start()
 
     def upload_progress_callback(self, current: int, total: int, chat_id: int, file_name: str):
-        """Wrapper to safely call async progress updates from sync context"""
-        loop = asyncio.get_running_loop()
-        loop.create_task(self.async_upload_progress_callback(current, total, chat_id, file_name))
-
-    async def async_upload_progress_callback(self, current: int, total: int, chat_id: int, file_name: str):
-        """Enhanced progress callback with speed calculation"""
-        current_time = asyncio.get_event_loop().time()
+        """100% SYNC callback — NO async work, NO create_task.
+        Just stores data in dict and prints to console.
+        This prevents blocking the upload_file chunk pipeline."""
+        now = time.time()
         
-        # Initialize speed data if missing
-        if chat_id not in self.speed_data:
-            self.speed_data[chat_id] = {'last_bytes': 0, 'last_time': current_time, 'start_time': current_time, 'last_console_time': 0}
-
-        data = self.speed_data[chat_id]
+        if chat_id not in self._upload_state:
+            self._upload_state[chat_id] = {
+                'current': 0, 'total': total, 'file_name': file_name,
+                'start_time': now, 'last_bytes': 0, 'last_speed_time': now,
+                'last_console': 0, 'speed': 0.0, 'done': False
+            }
         
-        # Calculate Speed (MB/s)
-        time_diff = current_time - data['last_time']
-        speed_str = "0.0 MB/s"
+        state = self._upload_state[chat_id]
+        state['current'] = current
+        state['total'] = total
         
-        if time_diff > 0.5: # Update speed every 0.5s for accuracy
-            bytes_diff = current - data['last_bytes']
-            speed = (bytes_diff / 1024 / 1024) / time_diff # MB/s
-            speed_str = f"{speed:.2f} MB/s"
-            data['last_bytes'] = current
-            data['last_time'] = current_time
-            data['speed_str'] = speed_str # Cache logic
-        else:
-            speed_str = data.get('speed_str', "Calculating...")
-
-        # Console Update (Every 1 second)
-        if current_time - data.get('last_console_time', 0) >= 1 or current == total:
-            percent = min(100, (current / total) * 100)
-            uploaded_mb = current / 1024 / 1024
-            total_mb = total / 1024 / 1024
-            print(f"[Uploader] [INFO] Uploading {file_name}: {percent:.1f}% | {uploaded_mb:.1f}/{total_mb:.1f} MB | 🚀 {speed_str}")
-            data['last_console_time'] = current_time
-
-        # Telegram Update (Every 3 seconds)
-        if chat_id in self.last_update and current_time - self.last_update[chat_id] < 3:
-            return
+        # Calculate speed (update every 0.5s for smoothing)
+        td = now - state['last_speed_time']
+        if td > 0.5:
+            state['speed'] = (current - state['last_bytes']) / td / 1024 / 1024  # MB/s
+            state['last_bytes'] = current
+            state['last_speed_time'] = now
         
-        self.last_update[chat_id] = current_time
-        percent = min(100, (current / total) * 100)
-        uploaded_mb = current / 1024 / 1024
-        total_mb = total / 1024 / 1024
-
-        # Visual progress bar
-        bar = '⬢' * int(percent/5) + '⬡' * (20 - int(percent/5))
-        
-        progress_text = (
-            f"**📤 Uploading:** `{file_name}`\n"
-            f"**📊 Progress:** {percent:.1f}%\n"
-            f"🔹 {uploaded_mb:.1f}MB / {total_mb:.1f}MB\n"
-            f"🚀 **Speed:** {speed_str}\n"
-            f"{bar}\n"
-            f"**⚡ Status:** Uploading..."
-        )
-
-        try:
-            # If msg_id is already set (meaning it's an edit), or if user_msg_id was provided
-            if self.progress_data[chat_id]['msg_id'] is not None:
-                await self.telethon_client.edit_message(
-                    entity=chat_id,
-                    message=self.progress_data[chat_id]['msg_id'],
-                    text=progress_text,
-                )
-            elif self.progress_data[chat_id]['user_msg_id'] is not None: # Use user_msg_id for initial edit
-                 await self.telethon_client.edit_message(
-                    entity=chat_id,
-                    message=self.progress_data[chat_id]['user_msg_id'],
-                    text=progress_text,
-                )
-                 self.progress_data[chat_id]['msg_id'] = self.progress_data[chat_id]['user_msg_id']
+        # Console print every 1 second
+        if now - state['last_console'] >= 1 or current == total:
+            pct = min(100, current / total * 100)
+            spd = state['speed']
+            elapsed = now - state['start_time']
+            # ETA calculation
+            if pct > 0 and pct < 100:
+                eta_sec = (elapsed / pct * 100) - elapsed
+                eta_str = f"{int(eta_sec)}s"
+            elif current == total:
+                eta_str = "Done!"
             else:
-                # First progress update - send new message
-                message = await self.telethon_client.send_message(
-                    entity=chat_id,
-                    message=progress_text,
+                eta_str = "--"
+            print(f"[Uploader] [INFO] {file_name}: {pct:.1f}% | {current/1048576:.1f}/{total/1048576:.1f} MB | 🚀 {spd:.2f} MB/s | ⏱️ ETA: {eta_str}")
+            state['last_console'] = now
+        
+        if current == total:
+            state['done'] = True
+
+    async def _progress_poller(self, chat_id: int):
+        """Background task that updates Telegram progress message every 5 seconds.
+        Runs INDEPENDENTLY from the upload_file loop — never blocks chunk uploads."""
+        try:
+            while True:
+                await asyncio.sleep(5)  # 5 seconds between Telegram edits
+                state = self._upload_state.get(chat_id)
+                if not state or state['done']:
+                    break
+                
+                pct = min(100, state['current'] / state['total'] * 100)
+                uploaded_mb = state['current'] / 1048576
+                total_mb = state['total'] / 1048576
+                speed = state['speed']
+                elapsed = time.time() - state['start_time']
+                if pct > 0 and pct < 100:
+                    eta_sec = (elapsed / pct * 100) - elapsed
+                    eta_str = f"{int(eta_sec)}s"
+                else:
+                    eta_str = "--"
+                
+                bar = '⬢' * int(pct/5) + '⬡' * (20 - int(pct/5))
+                
+                progress_text = (
+                    f"**📤 Uploading:** `{state['file_name']}`\n"
+                    f"**📊 Progress:** {pct:.1f}%\n"
+                    f"🔹 {uploaded_mb:.1f}MB / {total_mb:.1f}MB\n"
+                    f"🚀 **Speed:** {speed:.2f} MB/s\n"
+                    f"⏱️ **ETA:** {eta_str}\n"
+                    f"{bar}\n"
+                    f"**⚡ Status:** Uploading..."
                 )
-                self.progress_data[chat_id]['msg_id'] = message.id
-        except FloodWaitError as fwe:
-            print(f"[Uploader] [WARNING] FloodWaitError while updating upload progress: {fwe}")
-            await asyncio.sleep(fwe.seconds)
-        except MessageNotModifiedError:
-            pass  # Already up to date, ignore
-        except Exception as e:
-            print(f"[Uploader] [ERROR] Progress update failed: {e}")
+                
+                # Use bot_client for edits (separate connection — won't block upload chunks)
+                msg_client = self.bot_client or self.telethon_client
+                try:
+                    if self.progress_data[chat_id]['msg_id'] is not None:
+                        await msg_client.edit_message(
+                            entity=chat_id,
+                            message=self.progress_data[chat_id]['msg_id'],
+                            text=progress_text,
+                        )
+                    elif self.progress_data[chat_id]['user_msg_id'] is not None:
+                        await msg_client.edit_message(
+                            entity=chat_id,
+                            message=self.progress_data[chat_id]['user_msg_id'],
+                            text=progress_text,
+                        )
+                        self.progress_data[chat_id]['msg_id'] = self.progress_data[chat_id]['user_msg_id']
+                    else:
+                        message = await msg_client.send_message(
+                            entity=chat_id,
+                            message=progress_text,
+                        )
+                        self.progress_data[chat_id]['msg_id'] = message.id
+                except FloodWaitError as fwe:
+                    print(f"[Uploader] [WARNING] FloodWait: sleeping {fwe.seconds}s")
+                    await asyncio.sleep(fwe.seconds)
+                except MessageNotModifiedError:
+                    pass
+                except Exception as e:
+                    print(f"[Uploader] [ERROR] Progress update failed: {e}")
+        except asyncio.CancelledError:
+            pass  # Normal cleanup when upload finishes
 
     async def send_uploaded_message(self, chat_id: int, file_name: str, success: bool = True, error_msg: str = None):
         """Enhanced final message with better formatting"""
+        msg_client = self.bot_client or self.telethon_client
         try:
             if chat_id not in self.progress_data or self.progress_data[chat_id]['msg_id'] is None:
                 # If no message ID to edit, send a new message
@@ -144,7 +171,7 @@ class UploadManager:
                         "❌ **Upload Failed!**\n"
                         f"⚠️ **Reason:** {error_msg or 'Unknown error'}"
                     )
-                await self.telethon_client.send_message(
+                await msg_client.send_message(
                     entity=chat_id,
                     message=final_text,
                     reply_to=self.progress_data.get(chat_id, {}).get('user_msg_id'),
@@ -165,7 +192,7 @@ class UploadManager:
                 )
 
             try:
-                await self.telethon_client.edit_message(
+                await msg_client.edit_message(
                     entity=chat_id,
                     message=self.progress_data[chat_id]['msg_id'],
                     text=final_text,
@@ -175,7 +202,7 @@ class UploadManager:
             except Exception as edit_err:
                 # If edit fails, send new final message
                 print(f"[Uploader] [ERROR] Final message edit failed: {edit_err}")
-                await self.telethon_client.send_message(
+                await msg_client.send_message(
                     entity=chat_id,
                     message=final_text,
                     reply_to=self.progress_data[chat_id]['user_msg_id'],
@@ -185,7 +212,6 @@ class UploadManager:
         finally:
             # Clean up tracking data
             self.progress_data.pop(chat_id, None)
-            self.last_update.pop(chat_id, None)
 
     async def _split_video(self, file_path: str) -> List[str]:
         """Splits a video file into parts smaller than MAX_FILE_SIZE."""
@@ -232,12 +258,12 @@ class UploadManager:
             file_name = os.path.basename(file_path) if file_path else "Unknown File"
             # Initialize progress tracking
             self.progress_data[chat_id] = {
-                'msg_id': user_msg_id, # Use user_msg_id as initial msg_id
+                'msg_id': user_msg_id,
                 'user_msg_id': user_msg_id,
                 'file': file_name
             }
-            # Reset speed tracking
-            self.speed_data[chat_id] = {'last_bytes': 0, 'last_time': asyncio.get_event_loop().time(), 'start_time': asyncio.get_event_loop().time(), 'last_console_time': 0}
+            # Reset upload state for speed tracking
+            self._upload_state.pop(chat_id, None)
 
             if not os.path.exists(file_path):
                 await self.send_uploaded_message(chat_id, file_name, False, "File not found")
@@ -267,10 +293,21 @@ class UploadManager:
 
             thumb = thumbnail if thumbnail and os.path.exists(thumbnail) else None
 
+            # Start background poller for Telegram progress updates (does NOT block upload)
+            poller = asyncio.create_task(self._progress_poller(chat_id))
+
             result = await self.telethon_client.upload_file(
                 file=file_path,
                 progress_callback=lambda current, total: self.upload_progress_callback(current, total, chat_id, file_name)
             )
+
+            # Stop poller immediately after upload finishes
+            poller.cancel()
+            try:
+                await poller
+            except asyncio.CancelledError:
+                pass
+            self._upload_state.pop(chat_id, None)
 
             entity = await self.telethon_client.get_entity(STORE_CHANNEL_ID)
 

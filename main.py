@@ -47,9 +47,10 @@ async def main():
         client = TelegramClient(SESSION_FILE_PATH, API_ID, API_HASH)
         await client.start(bot_token=BOT_TOKEN)
 
-        # Initialize uploader's own user session client
+        # Initialize uploader's own user session client + give it the bot client for messages
         from uploader import upload_manager
-        await upload_manager.init_client()
+        upload_manager.set_bot_client(client)  # Bot client for progress messages (separate connection)
+        await upload_manager.init_client()     # User session for uploads (fast)
         
         logger.info("Bot is running. Press Ctrl+C to stop.")
         
